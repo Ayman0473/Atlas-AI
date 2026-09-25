@@ -17,6 +17,7 @@ Atlas AI is an interactive map-based chatbot that leverages real-time Google Map
 - **Synchronized Pin Navigation**: Clicking places mentioned in chat automatically highlights and centers their pin on the map with popup cards and direct links to Google Maps.
 - **Copy Share Link**: One-click sharing that encodes the active latitude, longitude, and zoom level into URL query parameters (`?lat=...&lng=...&z=...`) for instant deep-linking.
 - **Location Discovery & Geocoding**: Search bar with real-time geocoding autocomplete, world city presets (Tokyo, Paris, New York, Rome, etc.), and GPS auto-detection.
+- **Recent Locations & Local Storage History**: Automatically saves recent searches, selected city presets, and GPS locations in browser `localStorage`, accessible via an interactive 'Recents' dropdown in the Navbar with quick navigation, relative timestamps, and one-click removal.
 - **Interactive Prompts**: Quick category suggestions for specialty coffee, local dining, historical landmarks, scenic parks, and hidden gems.
 - **Responsive Split Design**: Side-by-side desktop layout and touch-friendly tab switching on mobile devices.
 

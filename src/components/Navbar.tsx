@@ -1,12 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, MapPin, Sparkles, Navigation, Globe, Trash2, X, Check, Share2 } from 'lucide-react';
+import {
+  Search,
+  MapPin,
+  Sparkles,
+  Navigation,
+  Globe,
+  Trash2,
+  X,
+  Check,
+  Share2,
+  History,
+  Clock,
+} from 'lucide-react';
 import { CITY_PRESETS } from '../data/presets';
-import { LocationPreset } from '../types';
+import { LocationPreset, RecentLocation } from '../types';
+import {
+  getStoredRecents,
+  saveRecentLocation,
+  deleteRecentLocation,
+  clearAllRecents,
+  formatRelativeTime,
+} from '../utils/recentLocations';
 
 interface NavbarProps {
   currentLocationName: string;
   onSelectCity: (preset: LocationPreset) => void;
-  onSelectCustomLocation: (location: { lat: number; lng: number; name: string }) => void;
+  onSelectCustomLocation: (location: { lat: number; lng: number; name: string; subtitle?: string }) => void;
   onClearChat: () => void;
   onLocateMe: () => void;
   isLocating: boolean;
@@ -29,8 +48,25 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showCityPicker, setShowCityPicker] = useState(false);
+  const [showRecents, setShowRecents] = useState(false);
+  const [recents, setRecents] = useState<RecentLocation[]>(getStoredRecents);
+
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const cityPickerRef = useRef<HTMLDivElement>(null);
+  const recentsRef = useRef<HTMLDivElement>(null);
+
+  // Sync recents from localStorage when changed
+  useEffect(() => {
+    const handleUpdate = () => {
+      setRecents(getStoredRecents());
+    };
+    window.addEventListener('atlas-recents-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('atlas-recents-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
 
   // Debounced search
   useEffect(() => {
@@ -67,6 +103,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       }
       if (cityPickerRef.current && !cityPickerRef.current.contains(event.target as Node)) {
         setShowCityPicker(false);
+      }
+      if (recentsRef.current && !recentsRef.current.contains(event.target as Node)) {
+        setShowRecents(false);
       }
     };
 
@@ -131,13 +170,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={idx}
                   onClick={() => {
+                    const primaryName = item.name.split(',')[0].trim();
                     onSelectCustomLocation({
                       lat: item.lat,
                       lng: item.lng,
-                      name: item.name.split(',')[0],
+                      name: primaryName,
+                      subtitle: item.name,
                     });
                     setSearchQuery('');
                     setIsDropdownOpen(false);
+                    setShowRecents(false);
                   }}
                   className="w-full text-left px-3.5 py-2.5 hover:bg-blue-50/70 border-b border-stone-100 last:border-b-0 flex items-start gap-2.5 transition-colors group"
                 >
@@ -154,11 +196,177 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
+        {/* Recents Dropdown */}
+        <div ref={recentsRef} className="relative">
+          <button
+            id="navbar-recents-toggle"
+            onClick={() => {
+              setShowRecents(!showRecents);
+              setShowCityPicker(false);
+              setIsDropdownOpen(false);
+            }}
+            title="Recent location searches & selections"
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
+              showRecents
+                ? 'bg-blue-50 text-blue-700 border-blue-200 font-semibold shadow-2xs'
+                : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700 border-stone-200'
+            }`}
+          >
+            <History className="w-3.5 h-3.5 text-stone-500" />
+            <span className="hidden sm:inline">Recents</span>
+            {recents.length > 0 && (
+              <span className="min-w-[17px] h-4 px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {recents.length}
+              </span>
+            )}
+          </button>
+
+          {showRecents && (
+            <div className="absolute right-0 sm:left-0 sm:right-auto top-11 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-stone-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              {/* Recents Header */}
+              <div className="px-3.5 py-2.5 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center">
+                    <History className="w-3 h-3" />
+                  </div>
+                  <span className="text-xs font-bold text-stone-900">Recent Locations</span>
+                  {recents.length > 0 && (
+                    <span className="text-[10px] bg-stone-200/80 text-stone-700 px-1.5 py-0.2 rounded-full font-semibold">
+                      {recents.length}
+                    </span>
+                  )}
+                </div>
+
+                {recents.length > 0 && (
+                  <button
+                    onClick={() => {
+                      clearAllRecents();
+                    }}
+                    className="text-[11px] text-stone-400 hover:text-rose-600 flex items-center gap-1 font-medium transition-colors hover:bg-rose-50 px-1.5 py-0.5 rounded"
+                    title="Clear all recent locations"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Clear all</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Recents Items List */}
+              <div className="max-h-72 overflow-y-auto divide-y divide-stone-100">
+                {recents.length === 0 ? (
+                  <div className="p-5 text-center">
+                    <div className="w-9 h-9 rounded-xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto mb-2">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <p className="text-xs font-bold text-stone-700">No recent locations yet</p>
+                    <p className="text-[11px] text-stone-400 mt-1 leading-relaxed">
+                      Locations you search or pick from city presets will be saved here for instant return.
+                    </p>
+                  </div>
+                ) : (
+                  recents.map((item) => {
+                    const isActive = currentLocationName.toLowerCase() === item.name.toLowerCase();
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          onSelectCustomLocation({
+                            lat: item.lat,
+                            lng: item.lng,
+                            name: item.name,
+                            subtitle: item.subtitle,
+                          });
+                          saveRecentLocation({
+                            name: item.name,
+                            subtitle: item.subtitle,
+                            lat: item.lat,
+                            lng: item.lng,
+                            source: item.source,
+                          });
+                          setShowRecents(false);
+                        }}
+                        className={`px-3.5 py-2.5 flex items-center justify-between gap-2.5 cursor-pointer transition-colors group ${
+                          isActive
+                            ? 'bg-blue-50/70 hover:bg-blue-50'
+                            : 'hover:bg-stone-50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <div
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                              item.source === 'preset'
+                                ? 'bg-blue-100 text-blue-700'
+                                : item.source === 'geolocation'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {item.source === 'preset' ? (
+                              <Globe className="w-3.5 h-3.5" />
+                            ) : item.source === 'geolocation' ? (
+                              <Navigation className="w-3.5 h-3.5" />
+                            ) : (
+                              <Search className="w-3.5 h-3.5" />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p
+                                className={`text-xs truncate ${
+                                  isActive ? 'font-bold text-blue-900' : 'font-semibold text-stone-800'
+                                }`}
+                              >
+                                {item.name}
+                              </p>
+                              {isActive && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-600 text-white">
+                                  Current
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-stone-400 mt-0.5">
+                              {item.subtitle ? (
+                                <span className="truncate max-w-[130px]">{item.subtitle}</span>
+                              ) : (
+                                <span className="font-mono">{item.lat.toFixed(3)}°, {item.lng.toFixed(3)}°</span>
+                              )}
+                              <span>•</span>
+                              <span>{formatRelativeTime(item.timestamp)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteRecentLocation(item.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-rose-600 rounded-md hover:bg-stone-200/50 transition-all shrink-0"
+                          title="Remove from recents"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* City Picker Quick Selector */}
         <div ref={cityPickerRef} className="relative hidden sm:block">
           <button
             id="city-picker-toggle"
-            onClick={() => setShowCityPicker(!showCityPicker)}
+            onClick={() => {
+              setShowCityPicker(!showCityPicker);
+              setShowRecents(false);
+              setIsDropdownOpen(false);
+            }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200/80 text-stone-700 border border-stone-200 transition-colors"
           >
             <Globe className="w-3.5 h-3.5 text-stone-500" />

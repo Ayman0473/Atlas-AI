@@ -6,6 +6,7 @@ import { PlaceDetailModal } from './components/PlaceDetailModal';
 import { CITY_PRESETS } from './data/presets';
 import { ChatMessage, LatLng, LocationPreset, PlaceRecommendation } from './types';
 import { generateMapShareUrl, parseMapShareUrl, copyToClipboard } from './utils/share';
+import { saveRecentLocation } from './utils/recentLocations';
 import { Map, MessageSquare, AlertCircle, Share2, Check, ExternalLink } from 'lucide-react';
 
 export default function App() {
@@ -96,6 +97,7 @@ export default function App() {
         const lng = pos.coords.longitude;
         setCenter({ lat, lng });
 
+        let detectedCity = 'My GPS Location';
         // Try reverse geocoding for a friendly name
         try {
           const res = await fetch(
@@ -110,6 +112,7 @@ export default function App() {
           if (res.ok) {
             const data = await res.json();
             const city = data.address?.city || data.address?.town || data.address?.suburb || 'My Location';
+            detectedCity = city;
             setLocationName(city);
           } else {
             setLocationName('My GPS Location');
@@ -117,6 +120,14 @@ export default function App() {
         } catch {
           setLocationName('My GPS Location');
         }
+
+        saveRecentLocation({
+          name: detectedCity,
+          subtitle: 'Current Location',
+          lat,
+          lng,
+          source: 'geolocation',
+        });
 
         setIsLocating(false);
       },
@@ -134,13 +145,27 @@ export default function App() {
     setCenter({ lat: city.lat, lng: city.lng });
     setLocationName(city.name);
     setErrorMessage(null);
+    saveRecentLocation({
+      name: city.name,
+      subtitle: city.country,
+      lat: city.lat,
+      lng: city.lng,
+      source: 'preset',
+    });
   };
 
   // Custom search selection
-  const handleSelectCustomLocation = (loc: { lat: number; lng: number; name: string }) => {
+  const handleSelectCustomLocation = (loc: { lat: number; lng: number; name: string; subtitle?: string }) => {
     setCenter({ lat: loc.lat, lng: loc.lng });
     setLocationName(loc.name);
     setErrorMessage(null);
+    saveRecentLocation({
+      name: loc.name,
+      subtitle: loc.subtitle,
+      lat: loc.lat,
+      lng: loc.lng,
+      source: 'search',
+    });
   };
 
   // Map click selection

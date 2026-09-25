@@ -61,3 +61,14 @@ export interface LocationPreset {
   country: string;
   description: string;
 }
+
+export interface RecentLocation {
+  id: string;
+  name: string;
+  subtitle?: string;
+  lat: number;
+  lng: number;
+  source: 'search' | 'preset' | 'geolocation' | 'custom';
+  timestamp: number;
+}
+
