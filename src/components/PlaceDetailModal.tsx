@@ -1,6 +1,7 @@
 import React from 'react';
 import { PlaceRecommendation } from '../types';
-import { X, ExternalLink, MapPin, MessageSquarePlus, Star, Compass } from 'lucide-react';
+import { getPlaceCategoryMeta } from '../utils/categories';
+import { X, ExternalLink, MessageSquarePlus } from 'lucide-react';
 
 interface PlaceDetailModalProps {
   place: PlaceRecommendation | null;
@@ -15,15 +16,27 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 }) => {
   if (!place) return null;
 
+  const catMeta = getPlaceCategoryMeta(place);
+  const CategoryIcon = catMeta.icon;
+
   return (
     <div className="absolute bottom-5 right-5 z-[500] max-w-sm w-full bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-200/90 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
       {/* Header */}
       <div className="p-4 bg-gradient-to-r from-stone-50 to-blue-50/40 border-b border-stone-200/70 flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-            <Compass className="w-4 h-4" />
+          <div
+            className="w-8 h-8 rounded-xl text-white flex items-center justify-center shrink-0 shadow-sm"
+            style={{ backgroundColor: catMeta.colorHex }}
+          >
+            <CategoryIcon className="w-4 h-4" />
           </div>
           <div className="min-w-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${catMeta.badgeBgClass}`}>
+                <CategoryIcon className="w-2.5 h-2.5" />
+                <span>{catMeta.label}</span>
+              </span>
+            </div>
             <h3 className="font-bold text-stone-900 text-sm md:text-base leading-tight truncate">
               {place.title}
             </h3>

@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { classifyPlaceCategory } from './src/utils/categoryClassification';
 
 dotenv.config();
 
@@ -266,6 +267,7 @@ Key instructions:
             id: `place-${idx}-${Date.now()}`,
             title: p.title,
             uri: p.uri,
+            category: classifyPlaceCategory(p.title, p.snippet),
             lat,
             lng,
             snippet: p.snippet,

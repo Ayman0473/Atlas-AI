@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ChatMessage, PlaceRecommendation } from '../types';
 import { CATEGORY_PROMPTS, CategoryPrompt } from '../data/presets';
+import { getPlaceCategoryMeta } from '../utils/categories';
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -177,6 +178,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {msg.places.map((place, pIdx) => {
                       const isSelected = selectedPlaceId === place.id;
+                      const catMeta = getPlaceCategoryMeta(place);
+                      const CatIcon = catMeta.icon;
+
                       return (
                         <div
                           key={place.id || pIdx}
@@ -190,13 +194,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                           <div>
                             <div className="flex items-start justify-between gap-1.5">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold flex items-center justify-center shrink-0">
+                                <span
+                                  className="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0 shadow-2xs"
+                                  style={{ backgroundColor: catMeta.colorHex }}
+                                >
                                   {pIdx + 1}
                                 </span>
                                 <h4 className="font-bold text-stone-900 text-xs truncate">
                                   {place.title}
                                 </h4>
                               </div>
+                            </div>
+
+                            <div className="mt-1 flex items-center gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold border ${catMeta.badgeBgClass}`}
+                              >
+                                <CatIcon className="w-2.5 h-2.5" />
+                                <span>{catMeta.shortLabel}</span>
+                              </span>
                             </div>
 
                             {place.snippet && (

@@ -13,6 +13,7 @@ Atlas AI is an interactive map-based chatbot that leverages real-time Google Map
   - **Topographic Terrain**: Shaded relief, mountain passes, and contour elevations.
   - **OpenStreetMap**: Collaborative global mapping with pedestrian trails.
   - **Clean Light**: High-contrast minimal layout for marker focus.
+- **Interactive Map Legend & Category Classification**: Color-coded, icon-distinguished map pins classified into canonical types (Restaurants & Dining, Landmarks & Culture, Parks & Nature, Coffee & Cafes, Bars & Nightlife, Shopping, and Attractions). Features an interactive, collapsible Map Legend on the map with active category counts and one-click category filtering.
 - **Synchronized Pin Navigation**: Clicking places mentioned in chat automatically highlights and centers their pin on the map with popup cards and direct links to Google Maps.
 - **Copy Share Link**: One-click sharing that encodes the active latitude, longitude, and zoom level into URL query parameters (`?lat=...&lng=...&z=...`) for instant deep-linking.
 - **Location Discovery & Geocoding**: Search bar with real-time geocoding autocomplete, world city presets (Tokyo, Paris, New York, Rome, etc.), and GPS auto-detection.

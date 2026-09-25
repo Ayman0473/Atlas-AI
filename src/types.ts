@@ -3,13 +3,23 @@ export interface LatLng {
   lng: number;
 }
 
+export type PlaceCategoryType =
+  | 'restaurant'
+  | 'landmark'
+  | 'park'
+  | 'cafe'
+  | 'nightlife'
+  | 'shopping'
+  | 'activity'
+  | 'general';
+
 export interface PlaceRecommendation {
   id: string;
   title: string;
   uri?: string;
   address?: string;
   rating?: number;
-  category?: string;
+  category?: PlaceCategoryType | string;
   lat?: number;
   lng?: number;
   snippet?: string;

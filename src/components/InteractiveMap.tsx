@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { LatLng, PlaceRecommendation } from '../types';
+import { LatLng, PlaceCategoryType, PlaceRecommendation } from '../types';
 import { generateMapShareUrl, copyToClipboard } from '../utils/share';
+import {
+  CATEGORY_DEFINITIONS,
+  classifyPlaceCategory,
+} from '../utils/categories';
+import { MapLegend } from './MapLegend';
 import {
   Layers,
   Locate,
@@ -34,6 +39,8 @@ interface InteractiveMapProps {
   onLocateMe: () => void;
   isLocating?: boolean;
   onViewportChange?: (viewport: { lat: number; lng: number; zoom: number }) => void;
+  activeCategoryFilter?: PlaceCategoryType | null;
+  onSelectCategoryFilter?: (category: PlaceCategoryType | null) => void;
 }
 
 export type MapLayerType = 'street' | 'satellite' | 'terrain' | 'osm' | 'light';
@@ -109,6 +116,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onLocateMe,
   isLocating = false,
   onViewportChange,
+  activeCategoryFilter: externalCategoryFilter,
+  onSelectCategoryFilter: onExternalSelectCategoryFilter,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -121,6 +130,15 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [currentZoom, setCurrentZoom] = useState<number>(initialZoom);
   const [currentMapCenter, setCurrentMapCenter] = useState<LatLng>(center);
+
+  // Category filter state (support internal or externally controlled)
+  const [internalCategoryFilter, setInternalCategoryFilter] = useState<PlaceCategoryType | null>(null);
+  const currentCategoryFilter = externalCategoryFilter !== undefined ? externalCategoryFilter : internalCategoryFilter;
+
+  const handleSelectCategoryFilter = (cat: PlaceCategoryType | null) => {
+    setInternalCategoryFilter(cat);
+    onExternalSelectCategoryFilter?.(cat);
+  };
 
   // Share state
   const [isShareCopied, setIsShareCopied] = useState(false);
@@ -295,40 +313,57 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     if (places.length === 0) return;
 
     const bounds = L.latLngBounds([[center.lat, center.lng]]);
+    let hasUnfilteredMarkers = false;
 
     places.forEach((place, index) => {
       if (typeof place.lat !== 'number' || typeof place.lng !== 'number') return;
 
-      bounds.extend([place.lat, place.lng]);
-
+      const catId = classifyPlaceCategory(place.title, place.snippet, place.category);
+      const catMeta = CATEGORY_DEFINITIONS[catId];
       const isSelected = selectedPlaceId === place.id;
+      const isFilteredOut = currentCategoryFilter !== null && catId !== currentCategoryFilter;
       const indexNumber = index + 1;
 
-      // Custom marker pin HTML
+      if (!isFilteredOut) {
+        bounds.extend([place.lat, place.lng]);
+        hasUnfilteredMarkers = true;
+      }
+
+      // Custom marker pin HTML with category color and icon
       const pinHtml = `
-        <div class="custom-map-pin cursor-pointer flex flex-col items-center">
-          <div class="flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shadow-lg transition-all border-2 ${
+        <div class="custom-map-pin cursor-pointer flex flex-col items-center transition-all duration-200 ${
+          isFilteredOut ? 'opacity-25 pointer-events-none scale-75' : 'opacity-100 hover:scale-110'
+        }">
+          <div class="relative flex items-center justify-center w-8 h-8 rounded-full text-white shadow-md transition-all border-2 ${
             isSelected
-              ? 'bg-amber-500 text-white border-white scale-125 ring-4 ring-amber-300/60'
-              : 'bg-rose-600 text-white border-white hover:bg-rose-700'
-          }">
-            ${indexNumber}
+              ? 'scale-125 ring-4 ring-amber-400 shadow-amber-500/40 z-50'
+              : 'border-white'
+          }" style="background-color: ${catMeta.colorHex};">
+            <div class="flex items-center justify-center text-white">
+              ${catMeta.svgIconHtml}
+            </div>
+            <span class="absolute -top-1 -right-1 min-w-[15px] h-3.5 px-0.5 rounded-full bg-stone-900/90 text-white text-[8px] font-bold flex items-center justify-center border border-white">
+              ${indexNumber}
+            </span>
           </div>
-          <div class="w-2 h-1.5 -mt-0.5 bg-stone-700/50 clip-triangle"></div>
+          <div class="w-2.5 h-1.5 -mt-0.5 clip-triangle shadow-xs" style="background-color: ${catMeta.colorHex}; filter: brightness(0.85);"></div>
         </div>
       `;
 
       const icon = L.divIcon({
         className: 'place-marker-icon',
         html: pinHtml,
-        iconSize: [28, 36],
-        iconAnchor: [14, 34],
-        popupAnchor: [0, -32],
+        iconSize: [32, 38],
+        iconAnchor: [16, 36],
+        popupAnchor: [0, -34],
       });
 
-      const marker = L.marker([place.lat, place.lng], { icon });
+      const marker = L.marker([place.lat, place.lng], {
+        icon,
+        zIndexOffset: isSelected ? 500 : isFilteredOut ? 10 : 100,
+      });
 
-      // Build popup content
+      // Build popup content with category badge
       const googleMapsLink = place.uri
         ? `<a href="${place.uri}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium mt-2 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition-colors">
             <span>Open in Google Maps</span>
@@ -341,16 +376,16 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         : '';
 
       const popupHtml = `
-        <div class="p-3.5 max-w-[240px] font-sans">
-          <div class="flex items-start gap-1.5">
-            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold shrink-0 mt-0.5">
-              ${indexNumber}
+        <div class="p-3.5 max-w-[250px] font-sans">
+          <div class="mb-1.5 flex items-center justify-between gap-1">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold" style="background-color: ${catMeta.colorHex}18; color: ${catMeta.colorHex}; border: 1px solid ${catMeta.colorHex}35;">
+              ${catMeta.svgIconHtml}
+              <span>${catMeta.shortLabel}</span>
             </span>
-            <div class="flex-1 min-w-0">
-              <h4 class="font-bold text-stone-900 text-sm leading-tight truncate">${place.title}</h4>
-              ${snippetHtml}
-            </div>
+            <span class="text-[10px] font-mono font-bold text-stone-400">#${indexNumber}</span>
           </div>
+          <h4 class="font-bold text-stone-900 text-sm leading-tight truncate">${place.title}</h4>
+          ${snippetHtml}
           <div class="mt-2.5 pt-2 border-t border-stone-100 flex flex-col gap-1.5">
             ${googleMapsLink}
           </div>
@@ -374,14 +409,14 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     });
 
     // If there are places, gently adjust bounds so user sees both center and markers
-    if (places.length > 0 && !selectedPlaceId) {
+    if (places.length > 0 && !selectedPlaceId && hasUnfilteredMarkers) {
       mapRef.current.fitBounds(bounds, {
         padding: [60, 60],
         maxZoom: 15,
         animate: true,
       });
     }
-  }, [places, selectedPlaceId]);
+  }, [places, selectedPlaceId, currentCategoryFilter]);
 
   // When selectedPlaceId changes, fly to it and open its popup
   useEffect(() => {
@@ -591,10 +626,18 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         </button>
       </div>
 
+      {/* Interactive Map Legend */}
+      <MapLegend
+        places={places}
+        activeCategoryFilter={currentCategoryFilter}
+        onSelectCategoryFilter={handleSelectCategoryFilter}
+        className="absolute bottom-4 left-4"
+      />
+
       {/* Bottom Map Helper Banner */}
-      <div className="absolute bottom-4 left-4 z-[400] hidden sm:flex items-center gap-2 bg-stone-900/85 backdrop-blur-md text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-md">
+      <div className="absolute bottom-4 right-16 z-[380] hidden xl:flex items-center gap-2 bg-stone-900/85 backdrop-blur-md text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-md">
         <Compass className="w-3.5 h-3.5 text-amber-400" />
-        <span>Click anywhere on the map to drop a pin & ask Atlas about that area</span>
+        <span>Click anywhere on map to drop a pin & explore</span>
       </div>
     </div>
   );
