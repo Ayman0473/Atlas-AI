@@ -112,6 +112,38 @@ const TILE_LAYERS: Record<MapLayerType, TileLayerMeta> = {
   },
 };
 
+export interface BaseMapLayerItem {
+  key: MapLayerType;
+  label: string;
+  name: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+export const BASE_MAP_LAYERS: BaseMapLayerItem[] = [
+  {
+    key: 'street',
+    label: 'Street',
+    name: 'Standard Street',
+    description: 'Detailed street grid, neighborhoods, points of interest, and roads',
+    icon: MapIcon,
+  },
+  {
+    key: 'satellite',
+    label: 'Satellite',
+    name: 'Satellite View',
+    description: 'High-resolution orbital aerial photography and true landscape imagery',
+    icon: SatelliteIcon,
+  },
+  {
+    key: 'terrain',
+    label: 'Terrain',
+    name: 'Topographic Terrain',
+    description: 'Hillshading, contour elevations, mountain passes, and natural geography',
+    icon: Mountain,
+  },
+];
+
 export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   center,
   initialZoom = 13,
@@ -140,6 +172,14 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [currentZoom, setCurrentZoom] = useState<number>(initialZoom);
   const [currentMapCenter, setCurrentMapCenter] = useState<LatLng>(center);
+
+  // Cycle between the 3 core base map views (Street -> Satellite -> Terrain)
+  const cycleNextBaseLayer = () => {
+    const sequence: MapLayerType[] = ['street', 'satellite', 'terrain'];
+    const currentIndex = sequence.indexOf(activeLayer);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % sequence.length;
+    setActiveLayer(sequence[nextIndex]);
+  };
 
   // Category filter state (support internal or externally controlled)
   const [internalCategoryFilter, setInternalCategoryFilter] = useState<PlaceCategoryType | null>(null);
@@ -544,26 +584,32 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         </div>
       )}
 
-      {/* Top Layer Control Segmented Bar */}
-      <div className="absolute top-4 right-16 z-[400] hidden sm:flex items-center gap-1 p-1 bg-white/95 backdrop-blur-md rounded-xl shadow-md border border-stone-200/80">
-        {(['street', 'satellite', 'terrain', 'light'] as MapLayerType[]).map((key) => {
-          const item = TILE_LAYERS[key];
-          const Icon = item.icon;
-          const isActive = activeLayer === key;
+      {/* Base Map Layer Toggle Segmented Control (Street | Satellite | Terrain) */}
+      <div
+        id="base-map-layer-toggle"
+        role="group"
+        aria-label="Base map views: Street, Satellite, Terrain"
+        className="absolute top-14 left-4 sm:top-4 sm:right-16 sm:left-auto z-[400] flex items-center p-1 bg-white/95 backdrop-blur-md rounded-xl shadow-md border border-stone-200/80 transition-all"
+      >
+        {BASE_MAP_LAYERS.map((layer) => {
+          const Icon = layer.icon;
+          const isActive = activeLayer === layer.key;
           return (
             <button
-              key={key}
-              id={`quick-layer-${key}`}
-              onClick={() => setActiveLayer(key)}
-              title={item.description}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              key={layer.key}
+              id={`layer-toggle-${layer.key}`}
+              type="button"
+              onClick={() => setActiveLayer(layer.key)}
+              title={`Switch to ${layer.name} (${layer.description})`}
+              aria-pressed={isActive}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-xs font-semibold'
                   : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
               }`}
             >
               <Icon className="w-3.5 h-3.5 shrink-0" />
-              <span>{item.shortLabel}</span>
+              <span>{layer.label}</span>
             </button>
           );
         })}
@@ -576,10 +622,12 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           <button
             id="map-layer-button"
             onClick={() => setShowLayerMenu(!showLayerMenu)}
-            title="Map Layer Styles"
-            className={`w-10 h-10 rounded-xl backdrop-blur-md shadow-md border flex items-center justify-center transition-colors ${
+            title={`Current map view: ${TILE_LAYERS[activeLayer]?.shortLabel || 'Street'}. Click to toggle/choose layers`}
+            aria-expanded={showLayerMenu}
+            aria-haspopup="true"
+            className={`w-10 h-10 rounded-xl backdrop-blur-md shadow-md border flex items-center justify-center transition-all cursor-pointer ${
               showLayerMenu
-                ? 'bg-blue-600 text-white border-blue-700'
+                ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300'
                 : 'bg-white/95 text-stone-700 border-stone-200/80 hover:bg-stone-50 hover:text-stone-900'
             }`}
           >
@@ -590,15 +638,46 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             <div className="absolute right-0 top-12 w-72 bg-white/98 backdrop-blur-md rounded-2xl shadow-2xl border border-stone-200 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-2.5 py-2 border-b border-stone-100 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-stone-900">Map Style & Layers</p>
-                  <p className="text-[10px] text-stone-500">Select base map cartography</p>
+                  <p className="text-xs font-bold text-stone-900">Map Layer Views</p>
+                  <p className="text-[10px] text-stone-500">Street, Satellite & Terrain</p>
                 </div>
-                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full capitalize">
-                  {TILE_LAYERS[activeLayer].shortLabel}
-                </span>
+                <button
+                  type="button"
+                  onClick={cycleNextBaseLayer}
+                  title="Cycle to next base view (Street → Satellite → Terrain)"
+                  className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full capitalize cursor-pointer transition-colors"
+                >
+                  Next: {activeLayer === 'street' ? 'Satellite' : activeLayer === 'satellite' ? 'Terrain' : 'Street'} &rarr;
+                </button>
               </div>
 
-              <div className="mt-1.5 space-y-1">
+              {/* Quick 3-Way Toggle Pills inside Menu */}
+              <div className="p-1 mt-1.5 bg-stone-100/90 rounded-xl flex items-center gap-1">
+                {BASE_MAP_LAYERS.map((b) => {
+                  const BIcon = b.icon;
+                  const isCurrent = activeLayer === b.key;
+                  return (
+                    <button
+                      key={b.key}
+                      type="button"
+                      onClick={() => {
+                        setActiveLayer(b.key);
+                        setShowLayerMenu(false);
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-blue-600 text-white shadow-xs font-semibold'
+                          : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
+                      }`}
+                    >
+                      <BIcon className="w-3 h-3" />
+                      <span>{b.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 space-y-1">
                 {(Object.keys(TILE_LAYERS) as MapLayerType[]).map((key) => {
                   const item = TILE_LAYERS[key];
                   const Icon = item.icon;
@@ -611,9 +690,9 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
                         setActiveLayer(key);
                         setShowLayerMenu(false);
                       }}
-                      className={`w-full text-left p-2.5 rounded-xl text-xs transition-all flex items-start gap-2.5 ${
+                      className={`w-full text-left p-2.5 rounded-xl text-xs transition-all flex items-start gap-2.5 cursor-pointer ${
                         isActive
-                          ? 'bg-blue-50/80 text-blue-900 border border-blue-200/80 font-medium'
+                          ? 'bg-blue-50/90 text-blue-900 border border-blue-200/80 font-medium shadow-xs'
                           : 'text-stone-700 hover:bg-stone-50 border border-transparent'
                       }`}
                     >
