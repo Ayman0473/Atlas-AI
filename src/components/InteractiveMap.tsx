@@ -41,6 +41,7 @@ interface InteractiveMapProps {
   onViewportChange?: (viewport: { lat: number; lng: number; zoom: number }) => void;
   activeCategoryFilter?: PlaceCategoryType | null;
   onSelectCategoryFilter?: (category: PlaceCategoryType | null) => void;
+  isVisible?: boolean;
 }
 
 export type MapLayerType = 'street' | 'satellite' | 'terrain' | 'osm' | 'light';
@@ -50,8 +51,10 @@ interface TileLayerMeta {
   shortLabel: string;
   description: string;
   url: string;
+  fallbackUrl?: string;
   attribution: string;
   maxZoom?: number;
+  subdomains?: string | string[];
   icon: React.ComponentType<{ className?: string }>;
 }
 
@@ -59,9 +62,10 @@ const TILE_LAYERS: Record<MapLayerType, TileLayerMeta> = {
   street: {
     name: 'Standard Street',
     shortLabel: 'Street',
-    description: 'Clear street grid, neighborhoods, points of interest, and roads',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    description: 'Detailed street grid, neighborhoods, points of interest, and roads',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    fallbackUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
     maxZoom: 19,
     icon: MapIcon,
   },
@@ -70,8 +74,9 @@ const TILE_LAYERS: Record<MapLayerType, TileLayerMeta> = {
     shortLabel: 'Satellite',
     description: 'High-resolution orbital aerial photography and true landscape imagery',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    fallbackUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP',
-    maxZoom: 18,
+    maxZoom: 19,
     icon: SatelliteIcon,
   },
   terrain: {
@@ -79,16 +84,19 @@ const TILE_LAYERS: Record<MapLayerType, TileLayerMeta> = {
     shortLabel: 'Terrain',
     description: 'Hillshading, contour elevations, mountain passes, and natural geography',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, USGS, FAO, NPS, NRCAN',
-    maxZoom: 18,
+    maxZoom: 19,
     icon: Mountain,
   },
   osm: {
-    name: 'OpenStreetMap',
+    name: 'Humanitarian OSM',
     shortLabel: 'OSM',
-    description: 'Classic open collaborative worldwide mapping with local footways',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    description: 'Collaborative worldwide mapping with high-contrast footways and landmarks',
+    url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+    fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors, Tiles by <a href="https://www.hotosm.org/" target="_blank" rel="noopener noreferrer">Humanitarian OpenStreetMap Team</a>',
+    subdomains: 'abc',
     maxZoom: 19,
     icon: Globe,
   },
@@ -96,9 +104,10 @@ const TILE_LAYERS: Record<MapLayerType, TileLayerMeta> = {
     name: 'Clean Light',
     shortLabel: 'Light',
     description: 'Minimalist low-distraction layout ideal for dense place markers',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    fallbackUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+    maxZoom: 16,
     icon: Layers,
   },
 };
@@ -118,6 +127,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   onViewportChange,
   activeCategoryFilter: externalCategoryFilter,
   onSelectCategoryFilter: onExternalSelectCategoryFilter,
+  isVisible = true,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -138,6 +148,34 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   const handleSelectCategoryFilter = (cat: PlaceCategoryType | null) => {
     setInternalCategoryFilter(cat);
     onExternalSelectCategoryFilter?.(cat);
+  };
+
+  // Helper to create resilient tile layer with crossOrigin and error fallback
+  const createTileLayer = (config: TileLayerMeta) => {
+    const layer = L.tileLayer(config.url, {
+      attribution: config.attribution,
+      maxZoom: config.maxZoom || 19,
+      subdomains: config.subdomains || 'abc',
+      crossOrigin: true,
+    });
+
+    if (config.fallbackUrl) {
+      layer.on('tileerror', (e: any) => {
+        const tile = e.tile;
+        if (tile && !tile._hasFallback) {
+          tile._hasFallback = true;
+          const coords = e.coords;
+          const fallback = config.fallbackUrl!
+            .replace('{z}', String(coords.z))
+            .replace('{x}', String(coords.x))
+            .replace('{y}', String(coords.y))
+            .replace('{s}', 'a');
+          tile.src = fallback;
+        }
+      });
+    }
+
+    return layer;
   };
 
   // Share state
@@ -189,6 +227,18 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     }
   };
 
+  // Invalidate map size when tab visibility changes (crucial for mobile layout)
+  useEffect(() => {
+    if (!mapRef.current || !isVisible) return;
+    mapRef.current.invalidateSize();
+    const t1 = setTimeout(() => mapRef.current?.invalidateSize(), 100);
+    const t2 = setTimeout(() => mapRef.current?.invalidateSize(), 300);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [isVisible]);
+
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -199,12 +249,9 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       zoomControl: false,
     });
 
-    // Add base tile layer
+    // Add base tile layer with subdomains & fallback
     const layerConfig = TILE_LAYERS[activeLayer];
-    const tileLayer = L.tileLayer(layerConfig.url, {
-      attribution: layerConfig.attribution,
-      maxZoom: 19,
-    }).addTo(map);
+    const tileLayer = createTileLayer(layerConfig).addTo(map);
 
     currentTileLayerRef.current = tileLayer;
 
@@ -233,9 +280,29 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       });
     });
 
+    // Handle container resizing (e.g. mobile tab toggles, flex layout reflows)
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
+    const handleWindowResize = () => {
+      map.invalidateSize();
+    };
+    window.addEventListener('resize', handleWindowResize);
+
+    // Initial size invalidations to ensure full tile coverage
+    setTimeout(() => map.invalidateSize(), 50);
+    setTimeout(() => map.invalidateSize(), 250);
+    setTimeout(() => map.invalidateSize(), 600);
+
     mapRef.current = map;
 
     return () => {
+      window.removeEventListener('resize', handleWindowResize);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -248,16 +315,15 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       mapRef.current.removeLayer(currentTileLayerRef.current);
     }
     const layerConfig = TILE_LAYERS[activeLayer];
-    const newTileLayer = L.tileLayer(layerConfig.url, {
-      attribution: layerConfig.attribution,
-      maxZoom: 19,
-    }).addTo(mapRef.current);
+    const newTileLayer = createTileLayer(layerConfig).addTo(mapRef.current);
     currentTileLayerRef.current = newTileLayer;
+    mapRef.current.invalidateSize();
   }, [activeLayer]);
 
   // Fly to new center when center coordinates change
   useEffect(() => {
     if (!mapRef.current) return;
+    mapRef.current.invalidateSize();
     const currentCenter = mapRef.current.getCenter();
     const distance = Math.hypot(currentCenter.lat - center.lat, currentCenter.lng - center.lng);
     

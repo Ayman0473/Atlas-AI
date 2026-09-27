@@ -345,6 +345,7 @@ export default function App() {
             onLocateMe={handleLocateMe}
             isLocating={isLocating}
             onViewportChange={(vp) => setCurrentViewport(vp)}
+            isVisible={mobileTab === 'map'}
           />
 
           {/* Place Details Modal / Popup on map */}
